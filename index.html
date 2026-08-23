@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>投资管家 · 个人跨账户净值</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script src="assets/vendor/echarts.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">¥</span>
+        <div>
+          <p class="brand-title">投资管家</p>
+          <p class="brand-sub">个人跨账户净值总览</p>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="tab active" data-route="dashboard">总览</button>
+        <button class="tab" data-route="holdings">持仓</button>
+        <button class="tab" data-route="analytics">分析</button>
+        <button class="tab" data-route="ledger">记账</button>
+        <button class="tab" data-route="dca">定投</button>
+        <button class="tab" data-route="settings">设置</button>
+      </nav>
+    </aside>
+
+    <div class="main-col">
+      <header class="topbar">
+        <div class="topbar-actions">
+          <button id="btn-refresh" class="btn btn-ghost" title="刷新行情">刷新行情</button>
+          <button id="btn-theme" class="btn btn-ghost" title="切换主题">暗色</button>
+        </div>
+      </header>
+
+      <main id="view" class="view"><!-- 视图由 app.js 渲染 --></main>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="assets/vendor/supabase.min.js"></script>
+  <script src="assets/db.js"></script>
+  <script src="assets/calc.js"></script>
+  <script src="assets/tradingdays.js"></script>
+  <script src="assets/sync.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+name = "invest-quote-proxy"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# 纯转发公开行情，不需要任何变量/密钥。
+# 免费额度（requests/day）对个人使用绰绰有余。
+# 部署后把返回的 *.workers.dev 地址填进 App「设置 → 行情代理」。
