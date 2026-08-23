@@ -31,6 +31,29 @@ const Sync = (() => {
 
   const isConfigured = () => configured && !!client;
 
+  // 字段映射：业务层用 camelCase（planId / lastRun），PostgREST 列名用 snake_case（plan_id / last_run）。
+  // 双向翻译在 push/pull 边界做，sync.js 内部任何 SQL 列都吃 snake、对 JS 暴露 camel。
+  const snakeTx = (tx) => {
+    if (!tx) return tx;
+    const { planId, ...rest } = tx;
+    return { ...rest, plan_id: planId ?? null };
+  };
+  const camelTx = (tx) => {
+    if (!tx) return tx;
+    const { plan_id, ...rest } = tx;
+    return { ...rest, planId: plan_id ?? null };
+  };
+  const snakePlan = (p) => {
+    if (!p) return p;
+    const { lastRun, ...rest } = p;
+    return { ...rest, last_run: lastRun ?? null };
+  };
+  const camelPlan = (p) => {
+    if (!p) return p;
+    const { last_run, ...rest } = p;
+    return { ...rest, lastRun: last_run ?? null };
+  };
+
   // 去掉云端内部字段，返回纯业务对象（存本地时用）
   const strip = (rows) =>
     (rows || []).map(({ owner, created_at, ...rest }) => rest);
@@ -43,14 +66,14 @@ const Sync = (() => {
     ]);
     if (txr.error) throw txr.error;
     if (pr.error) throw pr.error;
-    return { transactions: strip(txr.data), plans: strip(pr.data) };
+    return { transactions: strip(txr.data).map(camelTx), plans: strip(pr.data).map(camelPlan) };
   }
 
   async function pushTx(tx) {
     if (!isConfigured()) return;
     const { error } = await client
       .from("transactions")
-      .upsert({ ...tx, owner }, { onConflict: "id" });
+      .upsert({ ...snakeTx(tx), owner }, { onConflict: "id" });
     if (error) throw error;
   }
 
@@ -58,7 +81,7 @@ const Sync = (() => {
     if (!isConfigured()) return;
     const { error } = await client
       .from("plans")
-      .upsert({ ...plan, owner }, { onConflict: "id" });
+      .upsert({ ...snakePlan(plan), owner }, { onConflict: "id" });
     if (error) throw error;
   }
 
