@@ -1,4 +1,6 @@
-.workbuddy/
+﻿.workbuddy/
 node_modules/
 *.log
 .DS_Store
+invest-manager/
+proxy/.wrangler/
