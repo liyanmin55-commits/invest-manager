@@ -11,14 +11,14 @@ const Calc = (() => {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
-  // 把流水按 (账户+标的) 聚合成持仓，用加权成本法 + 已实现收益
+  // 把流水按 (标的) 聚合成持仓（同一标的跨账户合并为一行），用加权成本法 + 已实现收益
   function aggregate(transactions) {
     const map = new Map();
     const sorted = [...transactions].sort(
       (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
     );
     for (const t of sorted) {
-      const key = t.account + "::" + t.symbol;
+      const key = t.symbol;
       if (!map.has(key))
         map.set(key, {
           account: t.account,

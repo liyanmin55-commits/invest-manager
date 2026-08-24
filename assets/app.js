@@ -55,6 +55,21 @@ const App = (() => {
   /* ---------- 总览 ---------- */
   function dash(d) {
     const { tot, alloc, pos } = d;
+    const open = pos.filter((p) => p.quantity > 0);
+    const shareRows = open.length
+      ? open.sort((a, b) => b.marketValue - a.marketValue).map((p) => {
+          const s = tot.netAsset > 0 ? (p.marketValue / tot.netAsset) * 100 : 0;
+          return `<div style="margin:9px 0;">
+            <div class="row" style="font-size:12px;">
+              <span>${p.name} <span class="badge gray">${p.asset}</span></span>
+              <span>${s.toFixed(1)}% · ${fmt(p.marketValue, 0)}</span>
+            </div>
+            <div style="height:6px;background:var(--bg-2);border-radius:3px;overflow:hidden;margin-top:5px;">
+              <div style="height:100%;width:${Math.min(100, s).toFixed(1)}%;background:var(--accent);border-radius:3px;"></div>
+            </div>
+          </div>`;
+        }).join("")
+      : '<p class="muted tiny">暂无持仓</p>';
     const top = Calc.topContributors(pos, 3);
     const maxPos = pos.filter((p) => p.quantity > 0).sort((a, b) => b.marketValue - a.marketValue)[0];
     const conc = maxPos && tot.netAsset > 0 ? (maxPos.marketValue / tot.netAsset) * 100 : 0;
@@ -89,6 +104,10 @@ const App = (() => {
         <p class="tiny ${conc > 40 ? "down" : "muted"}" style="margin:10px 0 0;">
           最大持仓集中度 ${conc.toFixed(1)}%${conc > 40 ? " · 偏高，注意风险" : ""}
         </p>
+      </div>
+      <div class="card" style="margin-top:12px;">
+        <p class="card-title">持仓占比（按标的）</p>
+        ${shareRows}
       </div>
       <div class="card">
         <p class="card-title">持仓速览</p>
