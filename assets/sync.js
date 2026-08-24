@@ -45,13 +45,13 @@ const Sync = (() => {
   };
   const snakePlan = (p) => {
     if (!p) return p;
-    const { lastRun, ...rest } = p;
-    return { ...rest, last_run: lastRun ?? null };
+    const { lastRun, feeRate, ...rest } = p;
+    return { ...rest, last_run: lastRun ?? null, fee_rate: feeRate ?? 0 };
   };
   const camelPlan = (p) => {
     if (!p) return p;
-    const { last_run, ...rest } = p;
-    return { ...rest, lastRun: last_run ?? null };
+    const { last_run, fee_rate, ...rest } = p;
+    return { ...rest, lastRun: last_run ?? null, feeRate: fee_rate ?? 0 };
   };
 
   // 去掉云端内部字段，返回纯业务对象（存本地时用）

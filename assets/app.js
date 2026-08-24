@@ -252,6 +252,7 @@ const App = (() => {
           <div class="field"><label>类型</label><select class="select" name="asset">${assetOpts}</select></div>
           <div class="field"><label>风险分层</label><select class="select" name="risk"><option>稳健</option><option>进阶</option><option>对冲</option></select></div>
           <div class="field"><label>每期金额</label><input class="input" type="number" step="any" name="amount" required></div>
+          <div class="field"><label>申购费率%</label><input class="input" type="number" step="any" name="feeRate" min="0" value="0" placeholder="如 0.15，0=免申购费"></div>
           <div class="field"><label>频率</label><select class="select" name="freq"><option>每月</option><option>每周</option><option>每两周</option><option>每日</option></select></div>
           <div class="field" data-day-field><label data-day-label>定投日</label><input class="input" type="number" name="day" min="1" max="31" value="1"></div>
           <div class="field" style="align-self:end;"><button class="btn btn-primary" type="submit" style="width:100%">添加</button></div>
@@ -460,7 +461,7 @@ const App = (() => {
     dca: (d) => {
       $("#plan-form").onsubmit = async (e) => {
         e.preventDefault(); const f = e.target;
-        await DB.put("plans", { id: Calc.uid(), symbol: f.symbol.value.trim().toUpperCase(), name: f.name.value.trim(), asset: f.asset.value, risk: f.risk.value, amount: +f.amount.value, freq: f.freq.value, day: +f.day.value, lastRun: null });
+        await DB.put("plans", { id: Calc.uid(), symbol: f.symbol.value.trim().toUpperCase(), name: f.name.value.trim(), asset: f.asset.value, risk: f.risk.value, amount: +f.amount.value, feeRate: +(f.feeRate.value || 0), freq: f.freq.value, day: +f.day.value, lastRun: null });
         toast("计划已添加"); render();
       };
       // 频率切换：联动定投日字段（每日隐藏、每周/每两周指星期几、每月指几号）
@@ -770,9 +771,11 @@ const App = (() => {
         if (lastRunDate && execDay <= lastRunDate) continue; // 防重复
         const price = state.prices[plan.symbol];
         if (typeof price !== "number") { if (!skipped.includes(plan.name)) skipped.push(plan.name); continue; }
-        const qty = price > 0 ? amount / price : 0;
+        const feeRate = +plan.feeRate || 0;
+        const fee = +(amount * feeRate / 100).toFixed(2);
+        const qty = price > 0 ? (amount - fee) / price : 0;
         if (!(qty > 0)) { if (!skipped.includes(plan.name)) skipped.push(plan.name); continue; }
-        newTx.push({ id: Calc.uid(), planId: plan.id, account: "定投", symbol: plan.symbol, name: plan.name, asset: plan.asset, type: "buy", quantity: +(qty.toFixed(4)), price, fee: 0, date: TradingDays.ymd(execDay) });
+        newTx.push({ id: Calc.uid(), planId: plan.id, account: "定投", symbol: plan.symbol, name: plan.name, asset: plan.asset, type: "buy", quantity: +(qty.toFixed(4)), price, fee, date: TradingDays.ymd(execDay) });
         plan.lastRun = TradingDays.ymd(execDay);
         count++;
       }

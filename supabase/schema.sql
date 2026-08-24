@@ -33,6 +33,7 @@ create table if not exists public.plans (
   day         int,
   last_run    text,
   risk        text,
+  fee_rate    numeric default 0,
   created_at  timestamptz default now()
 );
 
