@@ -519,7 +519,9 @@ const App = (() => {
       $$("[data-exec]").forEach((form) => form.onsubmit = async (e) => {
         e.preventDefault(); const f = e.target; const planId = form.dataset.exec;
         const plan = d.plans.find((p) => p.id === planId);
-        const t = { id: Calc.uid(), planId, account: "定投", symbol: plan.symbol, name: plan.name, asset: plan.asset, type: "buy", quantity: +f.quantity.value, price: +f.price.value, fee: 0, date: f.date.value };
+        const execAmount = +f.price.value * +f.quantity.value;
+        const execFee = +((execAmount * (+plan.feeRate || 0)) / 100).toFixed(2);
+        const t = { id: Calc.uid(), planId, account: "定投", symbol: plan.symbol, name: plan.name, asset: plan.asset, type: "buy", quantity: +f.quantity.value, price: +f.price.value, fee: execFee, date: f.date.value };
         await DB.put("transactions", t);
         plan.lastRun = f.date.value; await DB.put("plans", plan);
         if (state.prices[plan.symbol] === undefined) { state.prices[plan.symbol] = t.price; await savePrices(); }
