@@ -602,9 +602,11 @@ const App = (() => {
         .filter((p) => p.quantity > 0 && !["存款", "理财"].includes(p.asset))
         .map((p) => ({ symbol: p.symbol, asset: p.asset }));
       if (!quotes.length) { toast("没有需要拉取行情的持仓"); return; }
+      const headers = { "Content-Type": "application/json" };
+      if (window.__supabaseKey) headers["apikey"] = window.__supabaseKey;
       const res = await fetch(proxy, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ quotes }),
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
@@ -644,10 +646,12 @@ const App = (() => {
     const asset = (form.querySelector('[name="asset"]') || {}).value || "";
     const log = (...a) => console.log("[autoFill]", symbol, ...a);
     // 拉一次 + 失败自动重试一次（扛住东财接口偶发抖动）
+    const qHeaders = { "Content-Type": "application/json" };
+    if (window.__supabaseKey) qHeaders["apikey"] = window.__supabaseKey;
     const tryOnce = async () => {
       const res = await fetch(proxy, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: qHeaders,
         body: JSON.stringify({ quotes: [{ symbol, asset }] }),
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
@@ -811,6 +815,8 @@ const App = (() => {
     const url = await DB.meta("supabase_url");
     const key = await DB.meta("supabase_key");
     const owner = (await DB.meta("supabase_owner")) || "";
+    window.__supabaseKey = key || "";
+    window.__quoteUrl = url ? url.replace(/\.supabase\.co$/, ".functions.supabase.co") + "/quote" : "";
     if (!url || !key) return; // 未配置，纯本地
     Sync.configure(url, key, owner);
     window.__sb = { url, key, owner };
@@ -839,21 +845,27 @@ const App = (() => {
     await loadPrices();
     // —— 云端同步：拉取（若已配置 Supabase）——
     await initCloudSync();
-    // 行情代理默认走同源 server.js 的 /api（由 Node 服务端直连东财/腾讯，不受中国大陆直连 *.workers.dev 不可达的影响）
-    // 同源的好处：电脑开 http://localhost:8080、手机开 http://电脑IP:8080 时各自自动指向正确的代理，无需改配置
-    const DEFAULT_PROXY = location.origin + "/api";
+    // 行情代理地址：
+    //   - 若已配置 Supabase 云端同步 → 默认用其 Edge Function（公网可达，云端版/手机也能自动拉行情，替代本地 server.js 的 /api）
+    //   - 否则回退到本地同源 /api（电脑开 server.js 时）
+    const LOCAL_PROXY = location.origin + "/api";
     let savedProxy = (await DB.meta("proxy")) || "";
-    // 之前若存过 workers.dev（国内直连连不上），自动切回本地代理
-    if (savedProxy.includes("workers.dev")) {
-      savedProxy = "";
-      await DB.meta("proxy", DEFAULT_PROXY);
-    }
-    // 存过 localhost 绝对地址、但当前不是从本机打开（手机访问电脑 IP）→ 自动改用同源地址
+    // 清理旧版 workers.dev（国内直连连不上）
+    if (savedProxy.includes("workers.dev")) { savedProxy = ""; await DB.meta("proxy", ""); }
+    // 之前存过 localhost 绝对地址、但当前不是从本机打开（手机访问电脑 IP）→ 自动改用同源地址
     if (/^https?:\/\/(localhost|127\.0\.0\.1)/.test(savedProxy) && !["localhost", "127.0.0.1"].includes(location.hostname)) {
       savedProxy = "";
-      await DB.meta("proxy", DEFAULT_PROXY);
+      await DB.meta("proxy", "");
     }
-    window.__proxy = savedProxy || DEFAULT_PROXY;
+    // 云端同步开着且用户没手动设代理 → 默认用 Edge Function（公网，手机/云端版可用）
+    if (window.__quoteUrl && !savedProxy) {
+      savedProxy = window.__quoteUrl;
+      await DB.meta("proxy", window.__quoteUrl);
+    } else if (!savedProxy) {
+      savedProxy = LOCAL_PROXY;
+      await DB.meta("proxy", LOCAL_PROXY);
+    }
+    window.__proxy = savedProxy;
     // 自动补定投执行：打开页面时检查是否到了交易日，到了就自动记一笔买入流水（不真下单）
     try {
       const res = await autoRunDca(new Date());

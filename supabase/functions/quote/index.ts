@@ -1,19 +1,9 @@
-// Supabase Edge Function · 行情代理（可选）
-// 作为 GitHub Pages 公网部署时的行情代理，替代被大陆直连不可达的 *.workers.dev。
-//
-// 部署方式 A（CLI）：
-//   1) 安装 supabase CLI：npm i -g supabase
-//   2) supabase login
-//   3) supabase functions deploy quote --project-ref <你的项目ref>
-// 部署方式 B（网页）：
-//   打开 Supabase 控制台 → Edge Functions → New Function → 粘贴本文件内容 → Deploy
-//
+// Supabase Edge Function · 行情代理（云端版）
 // 调用：POST https://<ref>.functions.supabase.co/quote
-//       body: { quotes: [{ symbol, asset }] }
-//       => { "600519": { price: 1272.83, name: "贵州茅台" }, ... }
+// body: { quotes: [{ symbol, asset }] }
+// => { "600519": { price: 1304.66, name: "贵州茅台" }, ... }
 //
-// 注意：Supabase 节点在海外，国内访问可能较慢或偶发超时；如不稳定，可改用你自己的
-// 国内轻量服务器 / 腾讯云 SCF 跑同样逻辑（逻辑见本文件，零依赖可移植）。
+// 数据源：东方财富(push2，UTF-8 干净 JSON) 为主，腾讯(qt.gtimg) 兜底；基金走净值接口。
 
 const FUND = "基金";
 const TRADEABLE = ["股票", "ETF", "可转债", "债券", "黄金"];
@@ -33,9 +23,12 @@ function prefixOf(code: string): string {
   return "sh" + c;
 }
 
-// Deno 的 TextDecoder 支持 gbk（需 ICU）；失败则降级 utf-8（名字可能乱码但价格仍准）
-let gbk: TextDecoder;
-try { gbk = new TextDecoder("gbk"); } catch { gbk = new TextDecoder("utf-8"); }
+// 东方财富 secid = <市场>.<代码>：上海=1，深圳=0，港股=116
+function secidOf(prefixed: string): string {
+  if (prefixed.startsWith("hk")) return "116." + prefixed.slice(2);
+  if (prefixed.startsWith("sz")) return "0." + prefixed.slice(2);
+  return "1." + prefixed.slice(2);
+}
 
 async function fetchFundName(symbol: string): Promise<string> {
   const u =
@@ -56,6 +49,29 @@ async function fetchFundName(symbol: string): Promise<string> {
   } catch (_) {}
   return "";
 }
+
+// 东方财富（UTF-8 JSON，名字正确；f43 单位为分，需 /100）
+async function fetchEM(items: { symbol: string; secid: string }[]) {
+  const out: Record<string, { price: number; name: string }> = {};
+  for (const it of items) {
+    const url = "https://push2.eastmoney.com/api/qt/stock/get?secid=" + it.secid + "&fields=f43,f58";
+    try {
+      const r = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/" },
+      });
+      const j = await r.json();
+      const d = j && j.data;
+      if (d && typeof d.f43 === "number" && d.f43 > 0) {
+        out[it.symbol] = { price: d.f43 / 100, name: String(d.f58 || "").trim() };
+      }
+    } catch (_) {}
+  }
+  return out;
+}
+
+// 腾讯兜底（GBK，价格直接；名字可能乱码但价格仍准）
+let gbk: TextDecoder;
+try { gbk = new TextDecoder("gbk"); } catch { gbk = new TextDecoder("utf-8"); }
 
 async function fetchTencent(items: { symbol: string; prefixed: string }[]) {
   const out: Record<string, { price: number; name: string }> = {};
@@ -102,20 +118,31 @@ async function fetchFund(symbol: string) {
 async function handleQuote(quotes: { symbol: string; asset: string }[]) {
   const result: Record<string, { price: number; name: string }> = {};
   const funds: string[] = [];
-  const tradeables: { symbol: string; prefixed: string }[] = [];
+  const tradeables: { symbol: string; prefixed: string; secid: string }[] = [];
   for (const q of quotes) {
     const symbol = String(q.symbol || "").trim();
     const asset = String(q.asset || "").trim();
     if (!symbol || symbol.toUpperCase() === "CASH") continue;
     if (!asset) continue; // 必须指定类型，避免误返股票名
     if (asset === FUND) funds.push(symbol);
-    else if (TRADEABLE.includes(asset)) tradeables.push({ symbol, prefixed: prefixOf(symbol) });
+    else if (TRADEABLE.includes(asset)) {
+      const prefixed = prefixOf(symbol);
+      tradeables.push({ symbol, prefixed, secid: secidOf(prefixed) });
+    }
   }
   for (const s of funds) {
     const r = await fetchFund(s);
     if (r) result[s] = r;
   }
-  if (tradeables.length) Object.assign(result, await fetchTencent(tradeables));
+  if (tradeables.length) {
+    const em = await fetchEM(tradeables.map((t) => ({ symbol: t.symbol, secid: t.secid })));
+    const missing = tradeables.filter((t) => !em[t.symbol]);
+    Object.assign(result, em);
+    if (missing.length) {
+      const tx = await fetchTencent(missing.map((t) => ({ symbol: t.symbol, prefixed: t.prefixed })));
+      Object.assign(result, tx);
+    }
+  }
   return result;
 }
 
