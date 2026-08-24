@@ -149,7 +149,7 @@ async function handleQuote(quotes: { symbol: string; asset: string }[]) {
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
 };
 
 Deno.serve(async (req: Request) => {
