@@ -619,9 +619,15 @@ const App = (() => {
     try {
       toast("正在拉取行情…");
       const d = await allData();
-      const quotes = d.pos
-        .filter((p) => p.quantity > 0 && !["存款", "理财"].includes(p.asset))
-        .map((p) => ({ symbol: p.symbol, asset: p.asset }));
+      const symMap = new Map();
+      for (const p of d.pos) {
+        if (p.quantity > 0 && !["存款", "理财"].includes(p.asset)) symMap.set(p.symbol, p.asset);
+      }
+      // 额外带上激活的定投计划标的，确保新建计划首笔也能拉到价并自动补记
+      for (const pl of d.plans || []) {
+        if (pl.active && pl.auto !== false && pl.symbol) symMap.set(pl.symbol, pl.asset || "基金");
+      }
+      const quotes = [...symMap.entries()].map(([symbol, asset]) => ({ symbol, asset }));
       if (!quotes.length) { toast("没有需要拉取行情的持仓"); return; }
       const headers = { "Content-Type": "application/json" };
       if (window.__supabaseKey) headers["apikey"] = window.__supabaseKey;
@@ -642,7 +648,14 @@ const App = (() => {
       }
       await savePrices();
       await DB.meta("lastRefresh", Date.now());
-      if (updated) { toast("行情已更新 " + updated + " 个标的"); render(); }
+      if (updated) {
+        toast("行情已更新 " + updated + " 个标的");
+        try {
+          const r = await autoRunDca(new Date());
+          if (r.count) toast("自动补记定投 " + r.count + " 笔");
+        } catch (e) { console.warn("autoRunDca 失败(不影响行情):", e); }
+        render();
+      }
       else { toast("代理未返回有效行情，检查标的或代理地址"); }
     } catch (e) {
       console.error(e);
@@ -761,8 +774,9 @@ const App = (() => {
       const amount = +plan.amount || 0;
       if (amount <= 0) continue;
       const lastRunDate = plan.lastRun ? parseYMD(plan.lastRun) : null;
-      // 起始：有上次执行则从其次日；从未执行则从明天（今天不自动记首笔，避免误记）
-      let start = lastRunDate ? addDays(lastRunDate, 1) : addDays(today, 1);
+      // 起始：有上次执行则从其次日；从未执行则从今天起（首笔也自动记，对齐"建计划即起投"）
+      const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      let start = lastRunDate ? addDays(lastRunDate, 1) : today0;
       if (start > today) continue;
       const targetDow = (plan.day | 0) % 7; // 每周/每两周：0周日..6周六
       const monthDay = plan.day | 0;
